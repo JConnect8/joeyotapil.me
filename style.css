@@ -108,14 +108,18 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 ════════════════════════════════════════════════════ */
 #sidebar {
   position: fixed; top: 0; left: 0;
-  width: var(--sidebar-w); height: 100vh;
+  width: var(--sidebar-w); height: 100vh; height: 100dvh;
   background: var(--panel);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column; align-items: center;
   padding: 40px 0 26px;
   z-index: 800;
   overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   transition: transform .42s cubic-bezier(.4,0,.2,1);
+  will-change: transform;
 }
 #sidebar::-webkit-scrollbar { width: 3px; }
 #sidebar::-webkit-scrollbar-thumb { background: rgba(0,212,255,.22); }
@@ -358,6 +362,21 @@ a:focus-visible, button:focus-visible, input:focus-visible {
   #sidebar.open { transform: translateX(0); z-index: 860; }
   #mobile-topbar { display: flex; }
   #hamburger-btn { display: flex; }
+}
+
+/* Compact Android/iOS screens: the sidebar's full content (avatar, name,
+   socials, 7 nav items, resume button, status) can be taller than a short
+   phone viewport. Tighten vertical rhythm here so less scrolling is ever
+   needed, on top of the 100dvh + overflow-y fix above. */
+@media (max-width: 1024px) and (max-height: 720px) {
+  #sidebar { padding: 22px 0 18px; }
+  .profile-img-wrap { width: 96px; height: 96px; margin-bottom: 12px; }
+  .profile-img-wrap img { width: 96px; height: 96px; }
+  .sidebar-social { margin: 16px 0 16px; }
+  .side-nav ul { gap: 6px; margin-top: 4px; }
+  .side-nav ul li a { padding: 8px 14px; }
+  .sidebar-resume-btn { margin-top: 14px; padding: 11px 16px; }
+  .sidebar-status { margin-top: 10px; }
 }
 
 /* ════════════════════════════════════════════════════
