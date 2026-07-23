@@ -42,11 +42,24 @@
   const mouse = { x: 0, y: 0, active: false };
 
   if (canvas && ctx && !prefersReducedMotion) {
+    // Small/touch screens get fewer particles and skip the O(n^2)
+    // connecting-line pass below — that pass is by far the most
+    // expensive part of every frame, and touch devices never see the
+    // cursor-linking effect it exists for anyway.
+    const isSmallScreen = window.matchMedia('(max-width: 700px)').matches;
+    const lowPower = isSmallScreen || !hasFinePointer;
+    const PARTICLE_COUNT = lowPower ? 28 : 80;
+    const DRAW_CONNECTIONS = !lowPower;
+
     function resize() {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     }
-    window.addEventListener('resize', resize);
+    let resizeRaf = null;
+    window.addEventListener('resize', () => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(resize);
+    });
     resize();
 
     // Track the cursor relative to the canvas so nearby particles can
@@ -58,7 +71,7 @@
         mouse.x = e.clientX - rect.left;
         mouse.y = e.clientY - rect.top;
         mouse.active = true;
-      });
+      }, { passive: true });
       homeSection.addEventListener('mouseleave', () => { mouse.active = false; });
     }
 
@@ -70,7 +83,12 @@
       this.r = Math.random() * 2 + 0.5;
       this.a = Math.random() * 0.5 + 0.1;
     }
-    for (let i = 0; i < 80; i++) particles.push(new Particle());
+    for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+
+    // The loop only ever runs while the hero is actually on screen and the
+    // tab is in the foreground — no point animating a canvas nobody can see.
+    let rafId = null;
+    let heroVisible = true;
 
     function drawParticles() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -83,19 +101,21 @@
         ctx.fillStyle = `rgba(0,212,255,${p.a})`;
         ctx.fill();
       });
-      // lines between nearby particles
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i+1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          if (dist < 110) {
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(0,212,255,${0.12 * (1 - dist/110)})`;
-            ctx.lineWidth = 0.8;
-            ctx.stroke();
+      // lines between nearby particles — skipped on low-power/touch devices
+      if (DRAW_CONNECTIONS) {
+        for (let i = 0; i < particles.length; i++) {
+          for (let j = i+1; j < particles.length; j++) {
+            const dx = particles[i].x - particles[j].x;
+            const dy = particles[i].y - particles[j].y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 110) {
+              ctx.beginPath();
+              ctx.moveTo(particles[i].x, particles[i].y);
+              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.strokeStyle = `rgba(0,212,255,${0.12 * (1 - dist/110)})`;
+              ctx.lineWidth = 0.8;
+              ctx.stroke();
+            }
           }
         }
       }
@@ -122,9 +142,30 @@
         ctx.fill();
         ctx.shadowBlur = 0;
       }
-      requestAnimationFrame(drawParticles);
+      rafId = requestAnimationFrame(drawParticles);
     }
-    drawParticles();
+
+    function startParticles() {
+      if (rafId === null && heroVisible && !document.hidden) rafId = requestAnimationFrame(drawParticles);
+    }
+    function stopParticles() {
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+    }
+
+    if (homeSection && 'IntersectionObserver' in window) {
+      const particlesObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          heroVisible = entry.isIntersecting;
+          heroVisible ? startParticles() : stopParticles();
+        });
+      }, { threshold: 0 });
+      particlesObserver.observe(homeSection);
+    }
+    document.addEventListener('visibilitychange', () => {
+      document.hidden ? stopParticles() : startParticles();
+    });
+
+    startParticles();
   }
 
   /* ---- Typewriter ---- */
@@ -260,7 +301,7 @@
   if (backTop) {
     window.addEventListener('scroll', () => {
       backTop.classList.toggle('visible', window.scrollY > 400);
-    });
+    }, { passive: true });
     backTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   }
 
